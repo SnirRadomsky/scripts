@@ -1,17 +1,33 @@
 #!/bin/bash
 
-# Quick reconnect script with better error handling
+# Improved quick reconnect script with better cleanup
 
 echo "🔄 Quick reconnect script"
 echo "========================"
 
-# Kill any existing adb connections first
-echo "🧹 Cleaning up existing connections..."
-adb kill-server
-sleep 1
-adb start-server
+# Step 1: Check current state
+echo "📋 Current ADB state:"
+adb devices
 
-# Common IP ranges in home networks
+# Check for offline wireless connections and clean them up
+OFFLINE_WIRELESS=$(adb devices | grep ":5555" | grep "offline")
+if [ ! -z "$OFFLINE_WIRELESS" ]; then
+    echo "🧹 Found offline wireless connections, cleaning up..."
+    
+    # Disconnect offline connections
+    echo "$OFFLINE_WIRELESS" | awk '{print $1}' | while read device; do
+        echo "Disconnecting offline device: $device"
+        adb disconnect "$device"
+    done
+    
+    # Restart ADB for clean state
+    echo "🔄 Restarting ADB..."
+    adb kill-server
+    sleep 2
+    adb start-server
+fi
+
+# Common IP ranges in home networks (adjust these to your network)
 COMMON_IPS=(
     "192.168.1.109"
     "192.168.1.110"
@@ -30,29 +46,44 @@ for ip in "${COMMON_IPS[@]}"; do
     # Try to connect
     CONNECT_RESULT=$(adb connect $ip:5555 2>&1)
     
-    if echo "$CONNECT_RESULT" | grep -q "connected\|already connected"; then
+    if echo "$CONNECT_RESULT" | grep -q "connected"; then
         echo "✅ Connected to $ip:5555"
         
         # Wait a moment for connection to stabilize
-        sleep 2
+        sleep 3
         
-        # Verify connection works
-        if adb devices | grep "$ip:5555" | grep -q "device$"; then
-            echo "✅ Connection verified"
-            echo "🚀 Launching scrcpy..."
+        # Verify connection works with a test command
+        if adb -s "$ip:5555" shell echo "test" > /dev/null 2>&1; then
+            echo "✅ Connection verified and stable"
+            echo "🚀 Launching scrcpy with optimized settings..."
             
-            # Launch scrcpy with more robust settings
-            scrcpy --max-fps 30 --video-bit-rate 4M --stay-awake
+            # Launch scrcpy with stability settings
+            scrcpy --max-fps 25 --video-bit-rate 3M --stay-awake --window-title "Android Screen"
             exit 0
         else
-            echo "❌ Connection failed verification"
+            echo "❌ Connection unstable, trying next IP..."
             adb disconnect $ip:5555 2>/dev/null
+        fi
+    elif echo "$CONNECT_RESULT" | grep -q "already connected"; then
+        echo "ℹ️  Already connected to $ip:5555"
+        
+        # Test if it actually works
+        if adb -s "$ip:5555" shell echo "test" > /dev/null 2>&1; then
+            echo "✅ Existing connection is working"
+            echo "🚀 Launching scrcpy..."
+            scrcpy --max-fps 25 --video-bit-rate 3M --stay-awake --window-title "Android Screen"
+            exit 0
+        else
+            echo "❌ Existing connection is dead, disconnecting..."
+            adb disconnect $ip:5555
         fi
     fi
 done
 
 echo "❌ Could not reconnect to any previous IP"
-echo "💡 Your phone's IP might have changed. Please run:"
-echo "   1. Connect USB cable"
-echo "   2. Set USB to 'File Transfer' mode"
-echo "   3. Run: wireless-scrcpy"
+echo ""
+echo "🔧 Troubleshooting steps:"
+echo "   1. Make sure your phone is on the same WiFi network"
+echo "   2. Check if phone's IP address changed"
+echo "   3. Connect USB cable and run: wireless-scrcpy"
+echo "   4. If still having issues, run: ~/scripts/cleanup_adb.sh"

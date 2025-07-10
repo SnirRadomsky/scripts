@@ -19,8 +19,10 @@ fi
 
 echo "🔍 Checking for connected devices..."
 
-# Check if any device is connected
-DEVICES=$(adb devices | grep -c "device$")
+# Check if any device is connected (including offline ones)
+DEVICES=$(adb devices | tail -n +2 | grep -v "^$" | wc -l)
+ONLINE_DEVICES=$(adb devices | grep -c "device$")
+
 if [ "$DEVICES" -eq 0 ]; then
     echo "❌ No phone detected. Please connect via USB first."
     echo "   1. Connect phone via USB"
@@ -28,6 +30,29 @@ if [ "$DEVICES" -eq 0 ]; then
     echo "   3. Accept debugging authorization"
     echo "   4. Set USB to 'File Transfer' mode"
     exit 1
+fi
+
+if [ "$ONLINE_DEVICES" -eq 0 ]; then
+    echo "⚠️  Devices detected but all are offline"
+    echo "🧹 Cleaning up offline connections..."
+    
+    # Clean up offline wireless connections
+    adb devices | grep ":5555" | grep "offline" | awk '{print $1}' | while read device; do
+        echo "Disconnecting offline device: $device"
+        adb disconnect "$device"
+    done
+    
+    # Restart ADB
+    adb kill-server
+    sleep 2
+    adb start-server
+    
+    # Check again
+    ONLINE_DEVICES=$(adb devices | grep -c "device$")
+    if [ "$ONLINE_DEVICES" -eq 0 ]; then
+        echo "❌ No online devices after cleanup. Please connect via USB."
+        exit 1
+    fi
 fi
 
 echo "✅ Device detected"
