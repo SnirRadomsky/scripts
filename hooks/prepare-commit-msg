@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Debug logging
+exec 1> /tmp/git_hook_debug.log 2>&1
+
+echo "Hook started at $(date)"
+echo "Arguments received: $@"
+
+# Get the current branch name
+BRANCH_NAME=$(git symbolic-ref --short HEAD)
+echo "Current branch: $BRANCH_NAME"
+
+# Extract JIRA ticket ID from the branch name (matches patterns like FLOP-123, ABC-456, etc.)
+if [[ $BRANCH_NAME =~ ([A-Z]+-[0-9]+) ]]; then
+    TICKET_ID=${BASH_REMATCH[1]}
+    COMMIT_MSG=$(cat "$1")
+    
+    # Only prepend if the ticket ID isn't already there
+    if [[ ! $COMMIT_MSG =~ $TICKET_ID ]]; then
+        echo "[$TICKET_ID] $COMMIT_MSG" > "$1"
+    fi
+else
+    echo "No ticket ID found in branch name"
+fi
+
+echo "Hook finished at $(date)"
