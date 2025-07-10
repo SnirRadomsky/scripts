@@ -30,7 +30,7 @@ python3 remove_pdf_images.py input.pdf
 # Specify custom output file
 python3 remove_pdf_images.py input.pdf output.pdf
 ```
-
+ 
 ### Directory Processing
 
 ```bash
